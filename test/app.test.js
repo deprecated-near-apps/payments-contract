@@ -12,9 +12,9 @@ const { GAS } = getConfig();
 jasmine.DEFAULT_TIMEOUT_INTERVAL = 50000;
 
 describe('deploy contract ' + contractName, () => {
-	let alice, bobPublicKey, implicitAccountId;
+	let alice, contract;
     
-	const testMessage = "hello world!";
+	const memo = "hello world!";
 
 	beforeAll(async () => {
 		alice = await getAccount();
@@ -27,47 +27,54 @@ describe('deploy contract ' + contractName, () => {
 	});
 
 	test('check create', async () => {
-		const contract = await getContract(alice);
+		contract = await getContract(alice);
 
-		await contract.create({
-			message: testMessage,
-			amount: parseNearAmount('1'),
-			owner: alice.accountId
+		await contract.deposit({
+			memo,
+		}, GAS, parseNearAmount('1'));
+        
+		const deposits = await contract.get_deposits({ account_id: alice.accountId });
+		expect(deposits[0].memo).toEqual(memo);
+		expect(deposits[0].paid).toEqual(false);
+	});
+
+	test('check create and make payment', async () => {
+
+		await contract.make_payment({
+			deposit_index: 0,
 		}, GAS);
         
-		const accessKeys = await alice.getAccessKeys();
-		const tx = await contract.get_message({ public_key: accessKeys[0].public_key });
-		expect(tx.message).toEqual(testMessage);
+		const deposits = await contract.get_deposits({ account_id: alice.accountId });
+		expect(deposits[0].paid).toEqual(true);
 	});
 
-	test('check create with no near', async () => {
-		const keyPair = KeyPair.fromRandom('ed25519');
-		const public_key = bobPublicKey = keyPair.publicKey.toString();
-		implicitAccountId = Buffer.from(keyPair.publicKey.data).toString('hex');
+	test('check cannot withdraw', async () => {
 
-		// typically done on server (sybil/captcha)
-		await contractAccount.addKey(public_key, contractName, contractMethods.changeMethods, parseNearAmount('0.1'));
+		try {
+            await contract.withdraw({
+                deposit_index: 0,
+            }, GAS);
+            expect(false)
+        } catch(e) {
+            console.warn(e)
+            expect(true)
+        }
+	});
+    
+    test('check create and withdraw', async () => {
+		contract = await getContract(alice);
 
-		const bob = createAccessKeyAccount(keyPair);
+		await contract.deposit({
+			memo,
+		}, GAS, parseNearAmount('1'));
+
+        await contract.withdraw({
+            deposit_index: 1,
+        }, GAS);
         
-		const contract = await getContract(bob);
-		await contract.create({
-			message: testMessage,
-			amount: parseNearAmount('1'),
-			owner: implicitAccountId
-		}, GAS);
-        
-		const result = await contract.get_message({ public_key });
-		expect(result.message).toEqual(testMessage);
+		const deposits = await contract.get_deposits({ account_id: alice.accountId });
+		expect(deposits.length).toEqual(1);
+		expect(deposits[0].paid).toEqual(true);
 	});
-
-	test('check purchase and credit bob (implicitAccountId)', async () => {
-		const contract = await getContract(alice);
-		const alicePurchased = await contract.purchase({ public_key: bobPublicKey}, GAS, parseNearAmount('1'));
-		expect(alicePurchased.message).toEqual(testMessage);
-		bob = await getAccount(implicitAccountId);
-		const bobbyBalance = (await bob.state()).amount;
-		expect(bobbyBalance).toEqual(parseNearAmount('1').toString());
-	});
-
+    
 });
