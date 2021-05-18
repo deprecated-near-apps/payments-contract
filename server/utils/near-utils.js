@@ -12,7 +12,7 @@ const {
 	}
 } = nearAPI;
 
-const credentials = JSON.parse(fs.readFileSync(process.env.HOME + '/.near-credentials/default/' + contractName + '.json'));
+const credentials = JSON.parse(fs.readFileSync(process.env.HOME + '/.near-credentials/testnet/' + contractName + '.json'));
 const keyStore = new InMemoryKeyStore()
 keyStore.setKey(networkId, contractName, KeyPair.fromString(credentials.private_key));
 const near = new Near({
